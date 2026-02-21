@@ -20,11 +20,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Firebase Scripts -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap');
@@ -45,15 +40,8 @@
     <script type="text/babel">
         const { useState, useEffect, useCallback, useMemo, memo, useRef } = React;
 
-        // --- Firebase Core Config ---
-        const firebaseConfig = JSON.parse(__firebase_config);
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'veo3-commander-pro-lynk';
-
         // --- Global Data Object ---
-        const GLOBAL_OPTIONS = {
+        const GLOBAL_DATA = {
             categories: ["Nasional", "Internasional", "Ekonomi", "Olahraga", "Teknologi", "Otomotif", "Hiburan", "Gaya Hidup"],
             translations: {
                 time: { 'Pagi Hari': 'morning, soft daylight', 'Siang Hari': 'midday, bright sun', 'Golden Hour': 'golden hour, warm sunset glow', 'Blue Hour': 'blue hour, cinematic twilight', 'Malam Hari': 'night, dark ambient', 'Cyberpunk Night': 'night with neon glow', 'Fajar': 'dawn, hazy morning mist' },
@@ -68,7 +56,7 @@
                 lighting: ['Cinematic', 'Natural', 'Soft Studio', 'Hard Noir', 'Neon', 'Backlit', 'Volumetric'],
                 style: ['Realistic', 'Vintage', 'Anime', '3D Render', 'Documentary', 'CCTV'],
                 mood: ['Dramatis', 'Ceria', 'Misterius', 'Sedih', 'Tegang', 'Zen'],
-                aspectRatio: ['9:16 (Vertical)', '1:1 (Square)', '16:9 (Landscape)', '21:9 (Ultrawide)', '4:3 (Classic)'],
+                aspectRatio: ['9:16 (TikTok/Reels)', '1:1 (Instagram)', '16:9 (YouTube)', '21:9 (Cinema)', '4:3 (Classic)'],
                 language: ['Indonesian', 'English', 'Japanese', 'Arabic', 'Spanish', 'French'],
                 dialogueMode: ['Monolog', 'Bergantian (Alternating)', 'Bersamaan (Simultaneous)']
             },
@@ -101,7 +89,7 @@
             return <span ref={iconRef} className={`inline-flex items-center justify-center shrink-0 ${className}`} />;
         });
 
-        // --- UI Field Component ---
+        // --- UI components ---
         const InputGroup = memo(({ label, name, value, icon, placeholder, onChange, type = "text" }) => (
             <div className="flex flex-col gap-1.5 w-full group">
                 <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.12em] flex items-center gap-1.5 transition-colors group-focus-within:text-indigo-500 text-left">
@@ -130,9 +118,8 @@
             </div>
         ));
 
-        // --- Root App ---
+        // --- Main App ---
         const App = () => {
-            const [user, setUser] = useState(null);
             const [history, setHistory] = useState([]);
             const [isRefining, setIsRefining] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
@@ -151,31 +138,37 @@
                 supportingSpeech: '', supportingSpeechLanguage: 'Indonesian', 
                 additionalDetails: '', time: 'Siang Hari', cameraMovement: 'Static', 
                 lighting: 'Cinematic', videoStyle: 'Realistic', mood: 'Dramatis', 
-                aspectRatio: '9:16 (Vertical)', sound: '', 
+                aspectRatio: '9:16 (TikTok/Reels)', sound: '', 
             });
 
             const [generatedPrompt, setGeneratedPrompt] = useState('');
 
-            // --- Handlers ---
-            const handleInputChange = useCallback((e) => {
-                const { name, value } = e.target;
-                setFormData(prev => ({ ...prev, [name]: value }));
+            // --- Storage Logic (LocalStorage for Portability) ---
+            useEffect(() => {
+                const saved = localStorage.getItem('veo3_commander_history');
+                if (saved) setHistory(JSON.parse(saved));
             }, []);
 
-            const saveHistory = async () => {
-                if (!user || !formData.subject) return;
-                try {
-                    await db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history').add({
-                        title: String(formData.subject), prompt: String(generatedPrompt), timestamp: Date.now()
-                    });
-                } catch (e) { setErrorMessage("Gagal menyimpan ke database."); }
+            const saveHistory = () => {
+                if (!formData.subject) return;
+                const newItem = {
+                    id: Date.now(),
+                    title: formData.subject,
+                    prompt: generatedPrompt,
+                    timestamp: Date.now()
+                };
+                const updated = [newItem, ...history].slice(0, 50); // Keep last 50
+                setHistory(updated);
+                localStorage.setItem('veo3_commander_history', JSON.stringify(updated));
             };
 
-            const deleteHistoryItem = async (id) => {
-                if (!user) return;
-                try { await db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history').doc(id).delete(); } catch (e) { console.error(e); }
+            const deleteHistoryItem = (id) => {
+                const updated = history.filter(item => item.id !== id);
+                setHistory(updated);
+                localStorage.setItem('veo3_commander_history', JSON.stringify(updated));
             };
 
+            // --- AI Actions ---
             const discoverTrends = async (cat) => {
                 if (trends[cat]) return;
                 setIsFetchingTrends(true);
@@ -193,7 +186,7 @@
                     const data = await res.json();
                     const content = data.candidates[0].content.parts[0].text;
                     setTrends(prev => ({ ...prev, [cat]: JSON.parse(content.replace(/```json|```/g, '').trim()) }));
-                } catch (e) { setErrorMessage("Koneksi gagal. Silakan muat ulang."); }
+                } catch (e) { setErrorMessage("Koneksi gagal. Silakan coba lagi."); }
                 finally { setIsFetchingTrends(false); }
             };
 
@@ -207,16 +200,15 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Buat paket prompt lengkap untuk: ${searchQuery}. Isi ke-22 kolom data (subject, appearance, dll) dalam format JSON.` }] }],
+                            contents: [{ parts: [{ text: `Buat paket prompt lengkap untuk: ${searchQuery}. Isi ke-22 kolom data (subject, appearance, action, expression, place, supportingCount, supportingAppearance, supportingAction, supportingClothing, dialogueMode, speech, speechLanguage, supportingSpeech, supportingSpeechLanguage, additionalDetails, time, cameraMovement, lighting, videoStyle, mood, aspectRatio, sound) dalam format JSON.` }] }],
                             generationConfig: { responseMimeType: "application/json" }
                         })
                     });
                     const data = await res.json();
-                    const content = data.candidates[0].content.parts[0].text;
-                    const aiResult = JSON.parse(content.replace(/```json|```/g, '').trim());
+                    const aiResult = JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim());
                     setFormData(prev => ({ ...prev, ...aiResult }));
                     setSearchQuery('');
-                } catch (e) { setErrorMessage("Gagal membuat paket ide."); }
+                } catch (e) { setErrorMessage("AI Gagal memproses paket ide."); }
                 finally { setIsSearching(false); }
             };
 
@@ -229,13 +221,13 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Ubah prompt video ini menjadi paragraf sinematik bahasa Inggris yang kaya detail untuk Google Veo 3: ${generatedPrompt}` }] }],
-                            systemInstruction: { parts: [{ text: "Gunakan bahasa teknis sinematografi tingkat lanjut. Output hanya satu paragraf." }] }
+                            contents: [{ parts: [{ text: `Refine this into one rich cinematic paragraph for Google Veo 3: ${generatedPrompt}` }] }],
+                            systemInstruction: { parts: [{ text: "Expert director. Use advanced cinematography terms. Single paragraph output only." }] }
                         })
                     });
                     const data = await res.json();
                     setGeneratedPrompt(data.candidates[0].content.parts[0].text.trim());
-                } catch (e) { setErrorMessage("AI sedang sibuk."); }
+                } catch (e) { setErrorMessage("Fitur perbaikan sedang sibuk."); }
                 finally { setIsRefining(false); }
             };
 
@@ -250,37 +242,25 @@
                 setTimeout(() => setCopied(false), 2000);
             };
 
-            // --- Effects ---
-            useEffect(() => {
-                const unsubscribe = auth.onAuthStateChanged(u => { 
-                    if (u) setUser(u); 
-                    else auth.signInAnonymously(); 
-                });
-                return () => unsubscribe();
+            const handleInputChange = useCallback((e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
             }, []);
 
+            // --- Effect: Build Final Prompt ---
             useEffect(() => {
-                if (!user) return;
-                return db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history')
-                    .onSnapshot(snap => {
-                        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        setHistory(data.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-                    });
-            }, [user]);
-
-            useEffect(() => {
-                let p = `Style: ${GLOBAL_OPTIONS.translations.style[formData.videoStyle] || formData.videoStyle}. Ratio: ${formData.aspectRatio.split(' ')[0]}. `;
+                let p = `Style: ${GLOBAL_DATA.translations.style[formData.videoStyle] || formData.videoStyle}. Ratio: ${formData.aspectRatio.split(' ')[0]}. `;
                 p += `Subject: ${formData.subject}, appearance: ${formData.mainAppearance}, wearing: ${formData.mainClothing}. Action: ${formData.action}, at ${formData.place}. Emotion: ${formData.expression}. `;
                 if (parseInt(formData.supportingCount) > 0) {
                     p += `Bg: ${formData.supportingCount} subjects (${formData.supportingAppearance}) wearing ${formData.supportingClothing} doing ${formData.supportingAction}. `;
                 }
                 if (formData.speech || formData.supportingSpeech) {
-                    p += `Interaction Mode: ${formData.dialogueMode}. `;
+                    p += `Dialogue Mode: ${formData.dialogueMode}. `;
                     if (formData.speech) p += `[Primary Voice - ${formData.speechLanguage}]: "${formData.speech}". `;
                     if (formData.supportingSpeech) p += `[Ambient Voice - ${formData.supportingSpeechLanguage}]: "${formData.supportingSpeech}". `;
                 }
-                p += `Technical: ${GLOBAL_OPTIONS.translations.camera[formData.cameraMovement]}, ${GLOBAL_OPTIONS.translations.lighting[formData.lighting]}, mood: ${GLOBAL_OPTIONS.translations.mood[formData.mood]}. `;
-                p += `Audio: ${formData.sound}. Particles: ${formData.additionalDetails}. Quality: 8k, realistic textures.`;
+                p += `Cinematography: ${GLOBAL_DATA.translations.camera[formData.cameraMovement]}, ${GLOBAL_DATA.translations.lighting[formData.lighting]}, mood: ${GLOBAL_DATA.translations.mood[formData.mood]}. `;
+                p += `Audio: ${formData.sound}. Detail: ${formData.additionalDetails}. 8k, realistic textures.`;
                 setGeneratedPrompt(p);
             }, [formData]);
 
@@ -289,7 +269,7 @@
             return (
                 <div className="max-w-7xl mx-auto p-4 md:p-8 animate-fade-in">
                     {errorMessage && (
-                        <div className="mb-6 bg-red-500 text-white p-4 rounded-2xl flex justify-between items-center shadow-xl animate-fade-in">
+                        <div className="mb-6 bg-red-600 text-white p-4 rounded-2xl flex justify-between items-center shadow-xl animate-fade-in">
                             <div className="flex items-center gap-2 font-bold text-left"><Icon name="alert-circle" /> {errorMessage}</div>
                             <button onClick={() => setErrorMessage('')} className="bg-black/10 p-2 rounded-xl"><Icon name="x" size={14}/></button>
                         </div>
@@ -321,7 +301,7 @@
                     </header>
 
                     <div className="mb-10 bg-slate-900 rounded-[2rem] p-3 flex gap-4 px-8 overflow-x-auto scrollbar-hide shadow-2xl">
-                        {GLOBAL_OPTIONS.categories.map(cat => (
+                        {GLOBAL_DATA.categories.map(cat => (
                             <button key={cat} onClick={() => { setSelectedCategory(cat); setShowTrends(true); }} className={`text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all px-5 py-2 rounded-2xl ${selectedCategory === cat ? 'text-indigo-400 bg-slate-800 border-indigo-400/50 border scale-105' : 'text-slate-400 hover:text-white'}`}>{cat}</button>
                         ))}
                     </div>
@@ -338,9 +318,9 @@
                                     <div>
                                         <div className="mb-4 p-2 bg-indigo-50 text-indigo-500 w-fit rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors shadow-sm"><Icon name="sparkles" size={20}/></div>
                                         <h3 className="font-[800] text-[13px] mb-2 text-slate-800 leading-tight uppercase tracking-tight">{t.title}</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Full Auto-Fill</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">Full Package</p>
                                     </div>
-                                    <button onClick={() => { setFormData(prev => ({...prev, ...t.data})); setShowTrends(false); window.scrollTo({top:0, behavior:'smooth'}); }} className="w-full mt-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-600 transition-colors shadow-lg active:scale-95 tracking-widest">PAKAI</button>
+                                    <button onClick={() => { setFormData(prev => ({...prev, ...t.data})); setShowTrends(false); window.scrollTo({top:0, behavior:'smooth'}); }} className="w-full mt-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-2xl hover:bg-indigo-600 transition-colors shadow-lg active:scale-95 tracking-widest">PAKAI</button>
                                 </div>
                             ))}
                         </div>
@@ -368,6 +348,7 @@
                                     <div className="md:col-span-2">
                                         <InputGroup label="Aksi Mereka" name="supportingAction" value={formData.supportingAction} icon="play-circle" placeholder="Mengepung dari segala arah" onChange={handleInputChange} />
                                     </div>
+                                    <InputGroup label="Kostum Figuran" name="supportingClothing" value={formData.supportingClothing} icon="shirt" placeholder="Baju tempur baja" onChange={handleInputChange} />
                                 </div>
                             </div>
 
@@ -378,20 +359,20 @@
                                         <div className="flex flex-col gap-3 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 shadow-inner">
                                             <div className="flex justify-between items-center px-1">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Dialog Utama</label>
-                                                <select name="speechLanguage" value={formData.speechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-indigo-600 shadow-sm uppercase">{GLOBAL_OPTIONS.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                                                <select name="speechLanguage" value={formData.speechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-indigo-600 shadow-sm uppercase">{GLOBAL_DATA.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
                                             </div>
                                             <textarea name="speech" value={formData.speech} onChange={handleInputChange} placeholder="Ketik dialog utama..." className="w-full bg-transparent outline-none text-sm text-slate-800 min-h-[90px] resize-none font-medium leading-relaxed text-left" />
                                         </div>
                                         <div className={`flex flex-col gap-3 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 shadow-inner transition-all ${parseInt(formData.supportingCount) > 0 ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none'}`}>
                                             <div className="flex justify-between items-center px-1">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Dialog Figuran</label>
-                                                <select name="supportingSpeechLanguage" value={formData.supportingSpeechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-purple-600 shadow-sm uppercase">{GLOBAL_OPTIONS.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                                                <select name="supportingSpeechLanguage" value={formData.supportingSpeechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-purple-600 shadow-sm uppercase">{GLOBAL_DATA.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
                                             </div>
                                             <textarea name="supportingSpeech" value={formData.supportingSpeech} onChange={handleInputChange} placeholder="Ketik balasan figuran..." className="w-full bg-transparent outline-none text-sm text-slate-800 min-h-[90px] resize-none font-medium leading-relaxed text-left" />
                                         </div>
                                     </div>
                                     <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                                        {GLOBAL_OPTIONS.lists.dialogueMode.map(m => (
+                                        {GLOBAL_DATA.lists.dialogueMode.map(m => (
                                             <button key={m} onClick={() => setFormData(p=>({...p, dialogueMode:m}))} className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap border-2 transition-all ${formData.dialogueMode === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100 scale-105' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}>{m}</button>
                                         ))}
                                     </div>
@@ -402,20 +383,20 @@
                                 <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-emerald-600 text-left">
                                     <h2 className="text-xl font-[900] flex items-center gap-3 mb-8 text-slate-800 uppercase tracking-tight"><Icon name="camera" className="text-emerald-500" /> Kamera & Teknis</h2>
                                     <div className="grid grid-cols-2 gap-6 mb-8">
-                                        <SelectGroup label="Gaya Visual" name="videoStyle" value={formData.videoStyle} options={GLOBAL_OPTIONS.lists.style} icon="palette" onChange={handleInputChange} />
-                                        <SelectGroup label="Waktu" name="time" value={formData.time} options={GLOBAL_OPTIONS.lists.time} icon="sun" onChange={handleInputChange} />
-                                        <SelectGroup label="Cahaya" name="lighting" value={formData.lighting} options={GLOBAL_OPTIONS.lists.lighting} icon="zap" onChange={handleInputChange} />
-                                        <SelectGroup label="Gerakan" name="cameraMovement" value={formData.cameraMovement} options={GLOBAL_OPTIONS.lists.camera} icon="video" onChange={handleInputChange} />
+                                        <SelectGroup label="Gaya Visual" name="videoStyle" value={formData.videoStyle} options={GLOBAL_DATA.lists.style} icon="palette" onChange={handleInputChange} />
+                                        <SelectGroup label="Waktu" name="time" value={formData.time} options={GLOBAL_DATA.lists.time} icon="sun" onChange={handleInputChange} />
+                                        <SelectGroup label="Cahaya" name="lighting" value={formData.lighting} options={GLOBAL_DATA.lists.lighting} icon="zap" onChange={handleInputChange} />
+                                        <SelectGroup label="Gerakan" name="cameraMovement" value={formData.cameraMovement} options={GLOBAL_DATA.lists.camera} icon="video" onChange={handleInputChange} />
                                     </div>
                                     <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-start gap-4">
                                         <Icon name="info" className="text-emerald-600 mt-1 shadow-sm" size={24}/>
-                                        <div><p className="text-[10px] text-emerald-800 font-[900] uppercase tracking-wider mb-1">Panduan Sudut:</p><span className="text-xs text-emerald-700 leading-relaxed font-semibold">{GLOBAL_OPTIONS.cameraInfo[formData.cameraMovement]}</span></div>
+                                        <div><p className="text-[10px] text-emerald-800 font-[900] uppercase tracking-wider mb-1">Panduan Sudut:</p><span className="text-xs text-emerald-700 leading-relaxed font-semibold">{GLOBAL_DATA.cameraInfo[formData.cameraMovement]}</span></div>
                                     </div>
                                 </div>
                                 <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-pink-500 text-left">
                                     <h2 className="text-xl font-[900] flex items-center gap-3 mb-8 text-slate-800 uppercase tracking-tight"><Icon name="music" className="text-pink-500" /> Audio & Detail</h2>
                                     <div className="space-y-6">
-                                        <SelectGroup label="Rasio" name="aspectRatio" value={formData.aspectRatio} options={GLOBAL_OPTIONS.lists.aspectRatio} icon="maximize" onChange={handleInputChange} />
+                                        <SelectGroup label="Rasio" name="aspectRatio" value={formData.aspectRatio} options={GLOBAL_DATA.lists.aspectRatio} icon="maximize" onChange={handleInputChange} />
                                         <InputGroup label="SFX & Musik" name="sound" value={formData.sound} icon="music" placeholder="Orchestral cinematic tension" onChange={handleInputChange} />
                                         <div className="flex flex-col gap-1.5">
                                             <label className="text-[10px] font-[900] text-slate-400 uppercase tracking-widest flex items-center gap-2 px-1"><Icon name="sparkles" size={14} className="text-pink-400" /> Detail Visual</label>
@@ -445,7 +426,7 @@
                                         </div>
                                     </div>
                                     <div className="bg-slate-800/40 rounded-[2.5rem] p-8 min-h-[250px] max-h-[450px] overflow-y-auto mb-10 border border-slate-700/50 custom-scrollbar text-slate-100 text-sm font-mono leading-loose whitespace-pre-wrap selection:bg-indigo-500 selection:text-white transition-all shadow-inner text-left">
-                                        {generatedPrompt || "Formulir kosong. Isi karakter utama atau klik tombol 'PAKAI' di menu tren..."}
+                                        {generatedPrompt || "Formulir kosong. Pilih kategori Tren atau isi data Karakter Utama..."}
                                     </div>
                                     <button onClick={handleCopy} disabled={!formData.subject} className={`w-full py-6 rounded-[2rem] font-[900] text-[13px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-4 active:scale-95 shadow-2xl ${copied ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-indigo-600 hover:bg-indigo-50 shadow-indigo-600/30'}`}>
                                         {copied ? <Icon name="check" size={22}/> : <Icon name="copy" size={22}/>} {copied ? 'DISALIN!' : 'SALIN PROMPT'}
@@ -453,7 +434,7 @@
                                 </div>
 
                                 <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 shadow-sm text-slate-800">
-                                    <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center justify-between mb-8 text-left">
                                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2"><Icon name="clock" size={16}/> Arsip Simpan</h3>
                                         <span className="bg-slate-100 text-[9px] font-black px-3 py-1 rounded-full text-slate-500">{history.length}</span>
                                     </div>
