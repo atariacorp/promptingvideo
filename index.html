@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VEO 3 COMMANDER: Ultimate Pro Plus</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/711/711245.png">
+    
+    <!-- Manifest as Data URI -->
+    <link rel="manifest" href='data:application/json,{"name":"Veo 3 Commander","short_name":"Veo3","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#4f46e5","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/711/711245.png","sizes":"512x512","type":"image/png"}]}'>
+
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236366f1'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 1rem; }
+        .card-shadow { box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08); }
+    </style>
+</head>
+<body class="bg-[#F8FAFC]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo, memo, useRef } = React;
+
+        // --- Firebase Core Config ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'veo3-commander-pro-lynk';
+
+        // --- Global Data Object ---
+        const GLOBAL_OPTIONS = {
+            categories: ["Nasional", "Internasional", "Ekonomi", "Olahraga", "Teknologi", "Otomotif", "Hiburan", "Gaya Hidup"],
+            translations: {
+                time: { 'Pagi Hari': 'morning, soft daylight', 'Siang Hari': 'midday, bright sun', 'Golden Hour': 'golden hour, warm sunset glow', 'Blue Hour': 'blue hour, cinematic twilight', 'Malam Hari': 'night, dark ambient', 'Cyberpunk Night': 'night with neon glow', 'Fajar': 'dawn, hazy morning mist' },
+                camera: { 'Static': 'static shot', 'Slow Pan': 'slow horizontal pan', 'Slow Tilt': 'slow vertical tilt', 'Zoom In': 'push-in zoom', 'Tracking': 'tracking gimbal shot', 'Handheld': 'handheld shake', 'Drone': 'drone aerial', 'Orbit': '360 orbit', 'Close-up': 'extreme close-up' },
+                lighting: { 'Cinematic': 'cinematic film lighting', 'Natural': 'natural ambient sunlight', 'Soft Studio': 'soft studio lights', 'Hard Noir': 'noir hard shadows', 'Neon': 'vibrant neon light', 'Backlit': 'dramatic backlit', 'Volumetric': 'volumetric fog rays' },
+                style: { 'Realistic': 'photorealistic cinematic', 'Vintage': '35mm film grain', 'Anime': 'stylized anime', '3D Render': 'UE5 3D render', 'Documentary': 'documentary footage', 'CCTV': 'grainy CCTV' },
+                mood: { 'Dramatis': 'dramatic', 'Ceria': 'cheerful', 'Misterius': 'mysterious', 'Sedih': 'melancholic', 'Tegang': 'high-tension', 'Zen': 'peaceful' }
+            },
+            lists: {
+                time: ['Pagi Hari', 'Siang Hari', 'Golden Hour', 'Blue Hour', 'Malam Hari', 'Cyberpunk Night', 'Fajar'],
+                camera: ['Static', 'Slow Pan', 'Slow Tilt', 'Zoom In', 'Tracking', 'Handheld', 'Drone', 'Orbit', 'Close-up'],
+                lighting: ['Cinematic', 'Natural', 'Soft Studio', 'Hard Noir', 'Neon', 'Backlit', 'Volumetric'],
+                style: ['Realistic', 'Vintage', 'Anime', '3D Render', 'Documentary', 'CCTV'],
+                mood: ['Dramatis', 'Ceria', 'Misterius', 'Sedih', 'Tegang', 'Zen'],
+                aspectRatio: ['9:16 (Vertical)', '1:1 (Square)', '16:9 (Landscape)', '21:9 (Ultrawide)', '4:3 (Classic)'],
+                language: ['Indonesian', 'English', 'Japanese', 'Arabic', 'Spanish', 'French'],
+                dialogueMode: ['Monolog', 'Bergantian (Alternating)', 'Bersamaan (Simultaneous)']
+            },
+            cameraInfo: {
+                'Static': 'Kamera diam sepenuhnya. Sangat baik untuk adegan dialog emosional.',
+                'Slow Pan': 'Pergeseran horizontal lambat memperlihatkan lingkungan.',
+                'Slow Tilt': 'Gerakan vertikal mendongak atau menunduk.',
+                'Zoom In': 'Menciptakan ketegangan atau fokus pada emosi subjek.',
+                'Tracking': 'Kamera mengikuti subjek yang sedang bergerak.',
+                'Handheld': 'Efek realistis, dokumenter, atau nyata.',
+                'Drone': 'Sudut pandang dari atas untuk skala luas.',
+                'Orbit': 'Kamera berputar mengelilingi subjek (epik/heroik).',
+                'Close-up': 'Fokus sangat dekat pada detail wajah atau objek.'
+            }
+        };
+
+        // --- Safe Icon Wrapper ---
+        const Icon = memo(({ name, size = 18, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (iconRef.current && window.lucide) {
+                    iconRef.current.innerHTML = '';
+                    const iconData = lucide.icons[name];
+                    if (iconData) {
+                        const svgString = iconData.toSvg({ width: size, height: size, class: className });
+                        iconRef.current.innerHTML = svgString;
+                    }
+                }
+            }, [name, size, className]);
+            return <span ref={iconRef} className={`inline-flex items-center justify-center shrink-0 ${className}`} />;
+        });
+
+        // --- UI Field Component ---
+        const InputGroup = memo(({ label, name, value, icon, placeholder, onChange, type = "text" }) => (
+            <div className="flex flex-col gap-1.5 w-full group">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.12em] flex items-center gap-1.5 transition-colors group-focus-within:text-indigo-500 text-left">
+                    <Icon name={icon} size={12} className="opacity-70" /> {label}
+                </label>
+                <input
+                    type={type} name={name} value={value || ''} onChange={onChange} placeholder={placeholder}
+                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm text-slate-700 w-full transition-all shadow-sm"
+                />
+            </div>
+        ));
+
+        const SelectGroup = memo(({ label, name, value, options, icon, onChange }) => (
+            <div className="flex flex-col gap-1.5 w-full group">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.12em] flex items-center gap-1.5 group-focus-within:text-indigo-500 text-left">
+                    <Icon name={icon} size={12} className="opacity-70" /> {label}
+                </label>
+                <div className="relative">
+                    <select
+                        name={name} value={value} onChange={onChange}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer shadow-sm"
+                    >
+                        {options && options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+            </div>
+        ));
+
+        // --- Root App ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [history, setHistory] = useState([]);
+            const [isRefining, setIsRefining] = useState(false);
+            const [isSearching, setIsSearching] = useState(false);
+            const [isFetchingTrends, setIsFetchingTrends] = useState(false);
+            const [showTrends, setShowTrends] = useState(false);
+            const [selectedCategory, setSelectedCategory] = useState("Nasional");
+            const [searchQuery, setSearchQuery] = useState('');
+            const [trends, setTrends] = useState({});
+            const [errorMessage, setErrorMessage] = useState('');
+            const [copied, setCopied] = useState(false);
+
+            const [formData, setFormData] = useState({
+                subject: '', mainAppearance: '', mainClothing: '', action: '', expression: '', place: '',
+                supportingCount: '0', supportingAppearance: '', supportingAction: '', supportingClothing: '',
+                dialogueMode: 'Monolog', speech: '', speechLanguage: 'Indonesian', 
+                supportingSpeech: '', supportingSpeechLanguage: 'Indonesian', 
+                additionalDetails: '', time: 'Siang Hari', cameraMovement: 'Static', 
+                lighting: 'Cinematic', videoStyle: 'Realistic', mood: 'Dramatis', 
+                aspectRatio: '9:16 (Vertical)', sound: '', 
+            });
+
+            const [generatedPrompt, setGeneratedPrompt] = useState('');
+
+            // --- Handlers ---
+            const handleInputChange = useCallback((e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            }, []);
+
+            const saveHistory = async () => {
+                if (!user || !formData.subject) return;
+                try {
+                    await db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history').add({
+                        title: String(formData.subject), prompt: String(generatedPrompt), timestamp: Date.now()
+                    });
+                } catch (e) { setErrorMessage("Gagal menyimpan ke database."); }
+            };
+
+            const deleteHistoryItem = async (id) => {
+                if (!user) return;
+                try { await db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history').doc(id).delete(); } catch (e) { console.error(e); }
+            };
+
+            const discoverTrends = async (cat) => {
+                if (trends[cat]) return;
+                setIsFetchingTrends(true);
+                setErrorMessage('');
+                try {
+                    const apiKey = "";
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: `Berikan 5 ide video sinematik terbaru untuk tren ${cat} di Indonesia. Setiap ide wajib mengisi SEMUA 22 keys formulir ini dalam JSON: subject, mainAppearance, mainClothing, action, expression, place, supportingCount, supportingAppearance, supportingAction, supportingClothing, dialogueMode, speech, speechLanguage, supportingSpeech, supportingSpeechLanguage, additionalDetails, time, cameraMovement, lighting, videoStyle, mood, aspectRatio, sound. Return array JSON murni.` }] }],
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+                    const data = await res.json();
+                    const content = data.candidates[0].content.parts[0].text;
+                    setTrends(prev => ({ ...prev, [cat]: JSON.parse(content.replace(/```json|```/g, '').trim()) }));
+                } catch (e) { setErrorMessage("Koneksi gagal. Silakan muat ulang."); }
+                finally { setIsFetchingTrends(false); }
+            };
+
+            const searchDirectIdea = async () => {
+                if (!searchQuery.trim()) return;
+                setIsSearching(true);
+                setErrorMessage('');
+                try {
+                    const apiKey = "";
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: `Buat paket prompt lengkap untuk: ${searchQuery}. Isi ke-22 kolom data (subject, appearance, dll) dalam format JSON.` }] }],
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+                    const data = await res.json();
+                    const content = data.candidates[0].content.parts[0].text;
+                    const aiResult = JSON.parse(content.replace(/```json|```/g, '').trim());
+                    setFormData(prev => ({ ...prev, ...aiResult }));
+                    setSearchQuery('');
+                } catch (e) { setErrorMessage("Gagal membuat paket ide."); }
+                finally { setIsSearching(false); }
+            };
+
+            const refineWithAI = async () => {
+                if (!formData.subject) return;
+                setIsRefining(true);
+                try {
+                    const apiKey = "";
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: `Ubah prompt video ini menjadi paragraf sinematik bahasa Inggris yang kaya detail untuk Google Veo 3: ${generatedPrompt}` }] }],
+                            systemInstruction: { parts: [{ text: "Gunakan bahasa teknis sinematografi tingkat lanjut. Output hanya satu paragraf." }] }
+                        })
+                    });
+                    const data = await res.json();
+                    setGeneratedPrompt(data.candidates[0].content.parts[0].text.trim());
+                } catch (e) { setErrorMessage("AI sedang sibuk."); }
+                finally { setIsRefining(false); }
+            };
+
+            const handleCopy = () => {
+                const el = document.createElement('textarea');
+                el.value = generatedPrompt;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+
+            // --- Effects ---
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(u => { 
+                    if (u) setUser(u); 
+                    else auth.signInAnonymously(); 
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                return db.collection('artifacts').doc(appId).collection('users').doc(user.uid).collection('history')
+                    .onSnapshot(snap => {
+                        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setHistory(data.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
+                    });
+            }, [user]);
+
+            useEffect(() => {
+                let p = `Style: ${GLOBAL_OPTIONS.translations.style[formData.videoStyle] || formData.videoStyle}. Ratio: ${formData.aspectRatio.split(' ')[0]}. `;
+                p += `Subject: ${formData.subject}, appearance: ${formData.mainAppearance}, wearing: ${formData.mainClothing}. Action: ${formData.action}, at ${formData.place}. Emotion: ${formData.expression}. `;
+                if (parseInt(formData.supportingCount) > 0) {
+                    p += `Bg: ${formData.supportingCount} subjects (${formData.supportingAppearance}) wearing ${formData.supportingClothing} doing ${formData.supportingAction}. `;
+                }
+                if (formData.speech || formData.supportingSpeech) {
+                    p += `Interaction Mode: ${formData.dialogueMode}. `;
+                    if (formData.speech) p += `[Primary Voice - ${formData.speechLanguage}]: "${formData.speech}". `;
+                    if (formData.supportingSpeech) p += `[Ambient Voice - ${formData.supportingSpeechLanguage}]: "${formData.supportingSpeech}". `;
+                }
+                p += `Technical: ${GLOBAL_OPTIONS.translations.camera[formData.cameraMovement]}, ${GLOBAL_OPTIONS.translations.lighting[formData.lighting]}, mood: ${GLOBAL_OPTIONS.translations.mood[formData.mood]}. `;
+                p += `Audio: ${formData.sound}. Particles: ${formData.additionalDetails}. Quality: 8k, realistic textures.`;
+                setGeneratedPrompt(p);
+            }, [formData]);
+
+            useEffect(() => { if (showTrends) discoverTrends(selectedCategory); }, [selectedCategory, showTrends]);
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 md:p-8 animate-fade-in">
+                    {errorMessage && (
+                        <div className="mb-6 bg-red-500 text-white p-4 rounded-2xl flex justify-between items-center shadow-xl animate-fade-in">
+                            <div className="flex items-center gap-2 font-bold text-left"><Icon name="alert-circle" /> {errorMessage}</div>
+                            <button onClick={() => setErrorMessage('')} className="bg-black/10 p-2 rounded-xl"><Icon name="x" size={14}/></button>
+                        </div>
+                    )}
+
+                    <header className="bg-white p-6 rounded-[2.5rem] card-shadow border border-slate-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-indigo-600 p-4 rounded-2xl text-white shadow-xl shadow-indigo-100"><Icon name="video" size={32} /></div>
+                            <div>
+                                <h1 className="text-2xl font-[900] tracking-tight text-slate-800 uppercase leading-none text-left">VEO 3 COMMANDER</h1>
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.25em] flex items-center gap-1 mt-1"><Icon name="zap" size={10}/> Auto-Pilot Pro Plus</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-1 w-full md:max-w-md relative group">
+                            <Icon name="search" className="absolute left-4 text-slate-300 group-focus-within:text-indigo-400 transition-colors" />
+                            <input 
+                                type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && searchDirectIdea()}
+                                placeholder="Cari ide berita kilat..." 
+                                className="w-full pl-12 pr-28 py-4 bg-slate-50 border border-slate-100 rounded-3xl text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white outline-none transition-all shadow-inner" 
+                            />
+                            <button onClick={searchDirectIdea} disabled={isSearching} className="absolute right-2 px-6 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-2xl hover:bg-indigo-700 shadow-lg active:scale-95 disabled:opacity-50">BUAT</button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowTrends(!showTrends)} className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${showTrends ? 'bg-orange-500 text-white shadow-xl shadow-orange-100' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
+                                <Icon name="trending-up" size={16}/> {showTrends ? 'TUTUP' : 'TREN'}
+                            </button>
+                        </div>
+                    </header>
+
+                    <div className="mb-10 bg-slate-900 rounded-[2rem] p-3 flex gap-4 px-8 overflow-x-auto scrollbar-hide shadow-2xl">
+                        {GLOBAL_OPTIONS.categories.map(cat => (
+                            <button key={cat} onClick={() => { setSelectedCategory(cat); setShowTrends(true); }} className={`text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all px-5 py-2 rounded-2xl ${selectedCategory === cat ? 'text-indigo-400 bg-slate-800 border-indigo-400/50 border scale-105' : 'text-slate-400 hover:text-white'}`}>{cat}</button>
+                        ))}
+                    </div>
+
+                    {showTrends && (
+                        <div className="mb-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 animate-fade-in">
+                            {isFetchingTrends ? (
+                                <div className="col-span-full py-20 flex flex-col items-center gap-4 bg-white rounded-[3rem] border-2 border-dashed border-indigo-100">
+                                    <div className="w-14 h-14 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                    <p className="text-xs font-black text-indigo-400 uppercase tracking-[0.3em] animate-pulse">Menghasilkan Ide Otomatis...</p>
+                                </div>
+                            ) : (trends[selectedCategory] || []).map((t, i) => (
+                                <div key={i} className="bg-white p-7 rounded-[2.5rem] border border-slate-100 hover:border-indigo-400 hover:scale-[1.03] transition-all card-shadow flex flex-col justify-between h-full group text-left">
+                                    <div>
+                                        <div className="mb-4 p-2 bg-indigo-50 text-indigo-500 w-fit rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors shadow-sm"><Icon name="sparkles" size={20}/></div>
+                                        <h3 className="font-[800] text-[13px] mb-2 text-slate-800 leading-tight uppercase tracking-tight">{t.title}</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Full Auto-Fill</p>
+                                    </div>
+                                    <button onClick={() => { setFormData(prev => ({...prev, ...t.data})); setShowTrends(false); window.scrollTo({top:0, behavior:'smooth'}); }} className="w-full mt-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-600 transition-colors shadow-lg active:scale-95 tracking-widest">PAKAI</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                        <div className="lg:col-span-8 space-y-10">
+                            <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-amber-500">
+                                <h2 className="text-xl font-[900] flex items-center gap-3 mb-10 text-slate-800 uppercase tracking-tight text-left"><Icon name="user" className="text-amber-500" /> Karakter Utama</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                                    <InputGroup label="Subjek Utama" name="subject" value={formData.subject} icon="users" placeholder="Ksatria Cyberpunk" onChange={handleInputChange} />
+                                    <InputGroup label="Rupa Fisik" name="mainAppearance" value={formData.mainAppearance} icon="ghost" placeholder="Wajah robotik, mata merah" onChange={handleInputChange} />
+                                    <InputGroup label="Pakaian" name="mainClothing" value={formData.mainClothing} icon="shirt" placeholder="Jubah metalik mengkilap" onChange={handleInputChange} />
+                                    <InputGroup label="Aksi" name="action" value={formData.action} icon="zap" placeholder="Mengayunkan pedang laser" onChange={handleInputChange} />
+                                    <InputGroup label="Ekspresi" name="expression" value={formData.expression} icon="message-circle" placeholder="Fokus dan serius" onChange={handleInputChange} />
+                                    <InputGroup label="Lokasi" name="place" value={formData.place} icon="map-pin" placeholder="Jakarta tahun 2077" onChange={handleInputChange} />
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-purple-600">
+                                <h2 className="text-xl font-[900] flex items-center gap-3 mb-10 text-slate-800 uppercase tracking-tight text-left"><Icon name="users" className="text-purple-600" /> Figuran & Latar</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                                    <InputGroup label="Jumlah" name="supportingCount" type="number" value={formData.supportingCount} icon="users" onChange={handleInputChange} />
+                                    <InputGroup label="Rupa & Pakaian" name="supportingAppearance" value={formData.supportingAppearance} icon="ghost" placeholder="Pasukan ninja bayangan" onChange={handleInputChange} />
+                                    <div className="md:col-span-2">
+                                        <InputGroup label="Aksi Mereka" name="supportingAction" value={formData.supportingAction} icon="play-circle" placeholder="Mengepung dari segala arah" onChange={handleInputChange} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-blue-600">
+                                <h2 className="text-xl font-[900] flex items-center gap-3 mb-10 text-slate-800 uppercase tracking-tight text-left"><Icon name="message-square" className="text-blue-500" /> Suara & Lip-Sync</h2>
+                                <div className="space-y-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="flex flex-col gap-3 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 shadow-inner">
+                                            <div className="flex justify-between items-center px-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Dialog Utama</label>
+                                                <select name="speechLanguage" value={formData.speechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-indigo-600 shadow-sm uppercase">{GLOBAL_OPTIONS.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                                            </div>
+                                            <textarea name="speech" value={formData.speech} onChange={handleInputChange} placeholder="Ketik dialog utama..." className="w-full bg-transparent outline-none text-sm text-slate-800 min-h-[90px] resize-none font-medium leading-relaxed text-left" />
+                                        </div>
+                                        <div className={`flex flex-col gap-3 p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 shadow-inner transition-all ${parseInt(formData.supportingCount) > 0 ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none'}`}>
+                                            <div className="flex justify-between items-center px-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Dialog Figuran</label>
+                                                <select name="supportingSpeechLanguage" value={formData.supportingSpeechLanguage} onChange={handleInputChange} className="text-[10px] font-bold bg-white px-4 py-1.5 rounded-xl border border-slate-200 text-purple-600 shadow-sm uppercase">{GLOBAL_OPTIONS.lists.language.map(l => <option key={l} value={l}>{l}</option>)}</select>
+                                            </div>
+                                            <textarea name="supportingSpeech" value={formData.supportingSpeech} onChange={handleInputChange} placeholder="Ketik balasan figuran..." className="w-full bg-transparent outline-none text-sm text-slate-800 min-h-[90px] resize-none font-medium leading-relaxed text-left" />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                                        {GLOBAL_OPTIONS.lists.dialogueMode.map(m => (
+                                            <button key={m} onClick={() => setFormData(p=>({...p, dialogueMode:m}))} className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap border-2 transition-all ${formData.dialogueMode === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100 scale-105' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'}`}>{m}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-emerald-600 text-left">
+                                    <h2 className="text-xl font-[900] flex items-center gap-3 mb-8 text-slate-800 uppercase tracking-tight"><Icon name="camera" className="text-emerald-500" /> Kamera & Teknis</h2>
+                                    <div className="grid grid-cols-2 gap-6 mb-8">
+                                        <SelectGroup label="Gaya Visual" name="videoStyle" value={formData.videoStyle} options={GLOBAL_OPTIONS.lists.style} icon="palette" onChange={handleInputChange} />
+                                        <SelectGroup label="Waktu" name="time" value={formData.time} options={GLOBAL_OPTIONS.lists.time} icon="sun" onChange={handleInputChange} />
+                                        <SelectGroup label="Cahaya" name="lighting" value={formData.lighting} options={GLOBAL_OPTIONS.lists.lighting} icon="zap" onChange={handleInputChange} />
+                                        <SelectGroup label="Gerakan" name="cameraMovement" value={formData.cameraMovement} options={GLOBAL_OPTIONS.lists.camera} icon="video" onChange={handleInputChange} />
+                                    </div>
+                                    <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-start gap-4">
+                                        <Icon name="info" className="text-emerald-600 mt-1 shadow-sm" size={24}/>
+                                        <div><p className="text-[10px] text-emerald-800 font-[900] uppercase tracking-wider mb-1">Panduan Sudut:</p><span className="text-xs text-emerald-700 leading-relaxed font-semibold">{GLOBAL_OPTIONS.cameraInfo[formData.cameraMovement]}</span></div>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 border-t-[12px] border-t-pink-500 text-left">
+                                    <h2 className="text-xl font-[900] flex items-center gap-3 mb-8 text-slate-800 uppercase tracking-tight"><Icon name="music" className="text-pink-500" /> Audio & Detail</h2>
+                                    <div className="space-y-6">
+                                        <SelectGroup label="Rasio" name="aspectRatio" value={formData.aspectRatio} options={GLOBAL_OPTIONS.lists.aspectRatio} icon="maximize" onChange={handleInputChange} />
+                                        <InputGroup label="SFX & Musik" name="sound" value={formData.sound} icon="music" placeholder="Orchestral cinematic tension" onChange={handleInputChange} />
+                                        <div className="flex flex-col gap-1.5">
+                                            <label className="text-[10px] font-[900] text-slate-400 uppercase tracking-widest flex items-center gap-2 px-1"><Icon name="sparkles" size={14} className="text-pink-400" /> Detail Visual</label>
+                                            <textarea name="additionalDetails" value={formData.additionalDetails} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[2rem] outline-none text-sm text-slate-800 min-h-[110px] shadow-inner focus:ring-2 focus:ring-pink-500/20 focus:border-pink-400 transition-all font-medium text-left" placeholder="Partikel debu, uap napas..." />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="lg:col-span-4 space-y-8">
+                            <div className="sticky top-8 space-y-8">
+                                <div className="bg-slate-900 rounded-[3.5rem] p-10 text-white shadow-2xl relative border-[10px] border-slate-800 overflow-hidden group text-left">
+                                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-500 via-indigo-600 to-emerald-500"></div>
+                                    <div className="flex items-center justify-between mb-10">
+                                        <div>
+                                            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-400 mb-1">Production Pack</h3>
+                                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Prompt Ready to Use</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={refineWithAI} disabled={isRefining || !formData.subject} className="p-4 bg-indigo-600 rounded-[1.25rem] hover:bg-indigo-500 active:scale-90 transition-all shadow-xl shadow-indigo-900/20 disabled:opacity-20">
+                                                {isRefining ? <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin"></div> : <Icon name="wand-2" size={20}/>}
+                                            </button>
+                                            <button onClick={saveHistory} disabled={!formData.subject} className="p-4 bg-slate-700 rounded-[1.25rem] hover:bg-slate-600 active:scale-90 transition-all shadow-lg">
+                                                <Icon name="save" size={20}/>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800/40 rounded-[2.5rem] p-8 min-h-[250px] max-h-[450px] overflow-y-auto mb-10 border border-slate-700/50 custom-scrollbar text-slate-100 text-sm font-mono leading-loose whitespace-pre-wrap selection:bg-indigo-500 selection:text-white transition-all shadow-inner text-left">
+                                        {generatedPrompt || "Formulir kosong. Isi karakter utama atau klik tombol 'PAKAI' di menu tren..."}
+                                    </div>
+                                    <button onClick={handleCopy} disabled={!formData.subject} className={`w-full py-6 rounded-[2rem] font-[900] text-[13px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-4 active:scale-95 shadow-2xl ${copied ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-indigo-600 hover:bg-indigo-50 shadow-indigo-600/30'}`}>
+                                        {copied ? <Icon name="check" size={22}/> : <Icon name="copy" size={22}/>} {copied ? 'DISALIN!' : 'SALIN PROMPT'}
+                                    </button>
+                                </div>
+
+                                <div className="bg-white p-10 rounded-[3rem] card-shadow border border-slate-100 shadow-sm text-slate-800">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2"><Icon name="clock" size={16}/> Arsip Simpan</h3>
+                                        <span className="bg-slate-100 text-[9px] font-black px-3 py-1 rounded-full text-slate-500">{history.length}</span>
+                                    </div>
+                                    <div className="space-y-5 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar text-xs">
+                                        {history.length === 0 && <div className="py-12 text-center flex flex-col items-center gap-3 opacity-30 text-left"><Icon name="database" size={32}/><p className="italic font-bold uppercase tracking-widest text-[9px]">Belum ada riwayat</p></div>}
+                                        {history.map(item => (
+                                            <div key={item.id} className="group p-6 bg-slate-50 rounded-[2rem] border-2 border-transparent flex items-center justify-between hover:border-indigo-100 hover:bg-white transition-all cursor-pointer shadow-sm active:scale-95" onClick={() => { setGeneratedPrompt(String(item.prompt)); }}>
+                                                <div className="flex-1 min-w-0 pr-4">
+                                                    <p className="font-extrabold text-slate-700 truncate uppercase tracking-tight text-[12px] text-left">{String(item.title)}</p>
+                                                    <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-tighter text-left">Muat Ulang</p>
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-2 rounded-xl hover:bg-red-50">
+                                                    <Icon name="trash-2" size={18}/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // --- PWA Handling ---
+        try {
+            if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+                const swCode = `self.addEventListener('fetch',e=>{});`;
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+            }
+        } catch (e) {}
+    </script>
+</body>
+</html>
